@@ -1,0 +1,25 @@
+# spring:
+#   datasource:
+#     url: jdbc:postgresql://localhost:5432/customer_support_db
+#     username: postgres
+#     password: 2072001
+
+#   jpa:
+#     hibernate:
+#       ddl-auto: update
+#     show-sql: true
+#     properties:
+#       hibernate:
+#         format_sql: true
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/customer_support_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
