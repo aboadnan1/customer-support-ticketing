@@ -52,9 +52,9 @@ Database connection settings are in `src/main/resources/application.yaml` (the p
 ```yaml
 spring:
   datasource:
-    url: <POSTGRESQL_JDBC_URL>
-    username: <POSTGRESQL_USERNAME>
-    password: <POSTGRESQL_PASSWORD>
+    url: DB_URL
+    username: DB_USERNAME
+    password: DB_PASSWORD
 ```
 
 The current JPA configuration uses `ddl-auto: update`, enables SQL logging, and enables formatted SQL logging. Do not commit real database passwords to source control.
@@ -127,9 +127,3 @@ The project includes unit tests for ticket business logic such as:
 - Closed ticket protection
 
 All 10 unit tests currently pass successfully.
-
-## Database Backup
-
-A PostgreSQL database backup is included with the project.
-
-The backup can be restored using PostgreSQL tools.
