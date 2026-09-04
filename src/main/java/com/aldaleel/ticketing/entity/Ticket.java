@@ -101,6 +101,20 @@ public class Ticket {
         OPEN,
         IN_PROGRESS,
         RESOLVED,
-        CLOSED
+        CLOSED,
+        CANCELED
+    }
+
+    public boolean canTransitionTo(Status nextStatus) {
+        if (this.status == null || nextStatus == null || this.status == nextStatus) {
+            return false;
+        }
+
+        return switch (this.status) {
+            case OPEN -> nextStatus == Status.IN_PROGRESS || nextStatus == Status.CANCELED;
+            case IN_PROGRESS -> nextStatus == Status.RESOLVED || nextStatus == Status.CANCELED;
+            case RESOLVED -> nextStatus == Status.CLOSED;
+            case CLOSED, CANCELED -> false;
+        };
     }
 }

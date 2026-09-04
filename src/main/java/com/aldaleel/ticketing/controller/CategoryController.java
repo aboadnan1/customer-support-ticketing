@@ -1,9 +1,12 @@
 package com.aldaleel.ticketing.controller;
 
+import com.aldaleel.ticketing.dto.request.CreateCategoryRequest;
+import com.aldaleel.ticketing.dto.request.UpdateCategoryRequest;
 import com.aldaleel.ticketing.dto.response.CategoryResponse;
 import com.aldaleel.ticketing.entity.Category;
 import com.aldaleel.ticketing.mapper.CategoryMapper;
 import com.aldaleel.ticketing.service.CategoryService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,18 +26,20 @@ public class CategoryController {
 
     @PostMapping
     public ResponseEntity<CategoryResponse> createCategory(
-            @RequestBody Category category
+            @Valid @RequestBody CreateCategoryRequest request
     ) {
+        Category category = Category.builder()
+                .name(request.name())
+                .description(request.description())
+                .build();
+
         Category savedCategory = categoryService.createCategory(category);
 
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(CategoryMapper.toResponse(savedCategory));
+        return ResponseEntity.status(HttpStatus.CREATED).body(CategoryMapper.toResponse(savedCategory));
     }
 
     @GetMapping
     public ResponseEntity<List<CategoryResponse>> getAllCategories() {
-
         List<CategoryResponse> response = categoryService
                 .getAllCategories()
                 .stream()
@@ -50,22 +55,22 @@ public class CategoryController {
     ) {
         Category category = categoryService.getCategoryById(id);
 
-        return ResponseEntity.ok(
-                CategoryMapper.toResponse(category)
-        );
+        return ResponseEntity.ok(CategoryMapper.toResponse(category));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<CategoryResponse> updateCategory(
             @PathVariable UUID id,
-            @RequestBody Category category
+            @Valid @RequestBody UpdateCategoryRequest request
     ) {
-        Category updatedCategory =
-                categoryService.updateCategory(id, category);
+        Category category = Category.builder()
+                .name(request.name())
+                .description(request.description())
+                .build();
 
-        return ResponseEntity.ok(
-                CategoryMapper.toResponse(updatedCategory)
-        );
+        Category updatedCategory = categoryService.updateCategory(id, category);
+
+        return ResponseEntity.ok(CategoryMapper.toResponse(updatedCategory));
     }
 
     @DeleteMapping("/{id}")
@@ -73,7 +78,6 @@ public class CategoryController {
             @PathVariable UUID id
     ) {
         categoryService.deleteCategory(id);
-
         return ResponseEntity.noContent().build();
     }
 }

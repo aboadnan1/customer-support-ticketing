@@ -1,129 +1,116 @@
-# Customer Support Ticketing
+# Customer Support Ticketing API
 
-A Spring Boot REST API for managing customer support users, categories, tickets, comments, assignments, and ticket status history.
+This project is a Spring Boot support ticket system for managing customer requests, agent assignments, comments, categories, and ticket lifecycle changes.
 
-## Tech Stack
+## Tech stack
 
 - Java 21
 - Spring Boot 4.0.8
-- Spring Web MVC
-- Spring Data JPA with Hibernate
-- Spring Boot Validation
-- PostgreSQL JDBC driver (version is managed by the Spring Boot parent; no explicit version is declared in `pom.xml`)
-- Maven, using the included Maven Wrapper (`mvnw` and `mvnw.cmd`)
-- Lombok
+- Spring Web
+- Spring Security + JWT
+- Spring Data JPA + Hibernate
+- PostgreSQL (runtime)
+- H2 (test profile)
+- Maven Wrapper
 
-## Project Structure
+## Roles
 
-```text
-src/main/java/com/aldaleel/ticketing/
-├── controller/   REST endpoints for users, categories, tickets, and ticket comments
-├── dto/
-│   ├── request/  Validated request records for creating, updating, assigning, and changing ticket status
-│   └── response/ Response records for users, categories, comments, tickets, and status history
-├── entity/       JPA entities for users, categories, tickets, comments, and ticket status history
-├── exception/    Global REST exception handling and error response creation
-├── mapper/       Conversion of entities into response DTOs, including nested ticket data
-├── repository/   Spring Data JPA repositories and ticket/comment lookup methods
-└── service/      Transactional business operations and ticket status rules
-```
+- CUSTOMER: can create and view their own tickets
+- AGENT: can view and update tickets assigned to them, and change status
+- ADMIN: can manage all records, including deletes
 
-## Prerequisites
+## Local run
+
+Requirements:
 
 - JDK 21
-- PostgreSQL
-- Maven, or use the included Maven Wrapper
+- PostgreSQL 16+ (or Docker Compose)
+- Optional: Docker Desktop if you want the package to run with containers
 
-## How to Run Locally
-
-Create the PostgreSQL database configured below, set the required connection values, then run:
+Set environment variables before running:
 
 ```powershell
-.\mvnw.cmd clean package
-.\mvnw.cmd spring-boot:run
+$env:DB_URL = "jdbc:postgresql://localhost:5432/customer_support_db"
+$env:DB_USERNAME = "postgres"
+$env:DB_PASSWORD = "postgres"
+$env:JWT_SECRET = "replace-with-a-long-random-secret"
+$env:JWT_EXPIRATION_MS = "3600000"
 ```
 
-The project does not define a custom `server.port`; Spring Boot therefore uses its default port, `8080`.
+Then start the app:
 
-## Required Configuration
-
-Database connection settings are in `src/main/resources/application.yaml` (the project uses `.yaml`, although this is commonly also called `application.yml`). Set these values for your local PostgreSQL instance:
-
-```yaml
-spring:
-  datasource:
-    url: DB_URL
-    username: DB_USERNAME
-    password: DB_PASSWORD
+```powershell
+./mvnw spring-boot:run
 ```
 
-The current JPA configuration uses `ddl-auto: update`, enables SQL logging, and enables formatted SQL logging. Do not commit real database passwords to source control.
+The app listens on port 8080 by default.
 
-## API Endpoints
+## Docker
 
-All endpoints are rooted at `/api` and accept/return JSON unless noted otherwise.
+This project includes a Dockerfile and Docker Compose setup:
 
-| Method   | Path                                            | Description                                             |
-| -------- | ----------------------------------------------- | ------------------------------------------------------- |
-| `POST`   | `/api/users`                                    | Create a user                                           |
-| `GET`    | `/api/users`                                    | List all users                                          |
-| `GET`    | `/api/users/{id}`                               | Get a user by ID                                        |
-| `PUT`    | `/api/users/{id}`                               | Update a user's name and role                           |
-| `DELETE` | `/api/users/{id}`                               | Delete a user                                           |
-| `POST`   | `/api/categories`                               | Create a category                                       |
-| `GET`    | `/api/categories`                               | List all categories                                     |
-| `GET`    | `/api/categories/{id}`                          | Get a category by ID                                    |
-| `PUT`    | `/api/categories/{id}`                          | Update a category                                       |
-| `DELETE` | `/api/categories/{id}`                          | Delete a category                                       |
-| `POST`   | `/api/tickets`                                  | Create a ticket                                         |
-| `GET`    | `/api/tickets`                                  | List all tickets                                        |
-| `GET`    | `/api/tickets/{id}`                             | Get a ticket, including comments and status history     |
-| `PUT`    | `/api/tickets/{id}`                             | Partially update ticket title, description, or priority |
-| `PUT`    | `/api/tickets/{id}/assign`                      | Assign a ticket to an agent                             |
-| `PUT`    | `/api/tickets/{id}/status?changedById={userId}` | Change ticket status and record status history          |
-| `DELETE` | `/api/tickets/{id}`                             | Delete a ticket                                         |
-| `POST`   | `/api/tickets/{ticketId}/comments`              | Add a comment to a ticket                               |
-| `GET`    | `/api/tickets/{ticketId}/comments`              | List comments for a ticket                              |
-| `GET`    | `/api/tickets/{ticketId}/comments/{commentId}`  | Get a comment by ID                                     |
-| `DELETE` | `/api/tickets/{ticketId}/comments/{commentId}`  | Delete a comment                                        |
+```powershell
+docker compose up --build
+```
 
-## Entities
+That starts:
 
-- **User**: Has a unique email, name, and role: `CUSTOMER`, `AGENT`, or `ADMIN`.
-- **Category**: Has a unique name and an optional description. A ticket belongs to one category.
-- **Ticket**: Has a title, description, priority, status, category, customer, optional assigned agent, comments, and status history. Priorities are `LOW`, `MEDIUM`, `HIGH`, and `URGENT`; statuses are `OPEN`, `IN_PROGRESS`, `RESOLVED`, and `CLOSED`.
-- **Comment**: Belongs to one ticket and one authoring user.
-- **TicketStatusHistory**: Belongs to one ticket and records the previous status, new status, user who changed it, and timestamp.
+- PostgreSQL on port 5432
+- the Spring Boot API on port 8080
 
-A customer creates tickets. An agent may be assigned to a ticket. Tickets contain comments and status-history records, and deleting a ticket cascades to its comments and status history.
+## Authentication
 
-## Business Rules
+The API exposes a JWT login endpoint:
 
-- New tickets must have a nonblank title and description, a category, and a customer. Titles may not exceed 200 characters.
-- Only users with the `CUSTOMER` role can create tickets.
-- If no priority is supplied, it defaults to `MEDIUM`. Accepted values are `LOW`, `MEDIUM`, `HIGH`, and `URGENT`.
-- New tickets start with `OPEN` status.
-- Only users with the `AGENT` role can be assigned as ticket agents. Assigning an `OPEN` ticket automatically changes it to `IN_PROGRESS` and records the change using the assigned agent.
-- Status changes must follow these transitions: `OPEN` -> `IN_PROGRESS` or `CLOSED`; `IN_PROGRESS` -> `RESOLVED` or `OPEN`; `RESOLVED` -> `CLOSED` or `IN_PROGRESS`. A ticket cannot be changed to its current status.
-- `CLOSED` tickets cannot be modified, including status changes, and cannot receive comments.
-- Status changes are recorded in ascending change-time order. Ticket and comment timestamps are set automatically when persisted.
-- User creation requires a nonblank name, a valid email, and a role. Email addresses must be unique.
-- Comment creation requires nonblank content and an author ID. The referenced ticket and author must exist.
-- Referenced users, categories, tickets, and comments must exist for their corresponding operations. Validation and illegal argument errors return HTTP 400; illegal state errors return HTTP 409.
+- `POST /api/auth/login`
+
+Request body:
+
+```json
+{
+  "email": "customer@example.com",
+  "password": "secret"
+}
+```
+
+Successful responses return a JWT in the `token` field.
+
+## Main endpoints
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| POST | `/api/users` | Public | Create a user account |
+| POST | `/api/auth/login` | Public | Authenticate and receive a JWT |
+| GET | `/api/categories` | Authenticated | List categories |
+| POST | `/api/categories` | Authenticated | Create a category |
+| GET | `/api/tickets` | Authenticated | List tickets visible to the current user |
+| POST | `/api/tickets` | Authenticated | Create a ticket as the current customer |
+| GET | `/api/tickets/{id}` | Authenticated | Get one ticket if access is allowed |
+| PUT | `/api/tickets/{id}` | Authenticated | Update a ticket the user owns or manages |
+| PUT | `/api/tickets/{id}/assign` | AGENT/ADMIN | Assign an agent to a ticket |
+| PUT | `/api/tickets/{id}/status` | AGENT/ADMIN | Move the ticket through its allowed state machine |
+| DELETE | `/api/tickets/{id}` | ADMIN | Delete a ticket |
+| GET | `/api/tickets/{ticketId}/comments` | Authenticated | List comments |
+| POST | `/api/tickets/{ticketId}/comments` | Authenticated | Add a comment |
+
+## State machine
+
+Ticket transitions are enforced in the service layer. Supported flow:
+
+- OPEN -> IN_PROGRESS
+- OPEN -> CANCELED
+- IN_PROGRESS -> RESOLVED
+- IN_PROGRESS -> CANCELED
+- RESOLVED -> CLOSED
+
+Any other transition is rejected with a custom exception and a 409 response.
 
 ## Testing
 
-Run the unit tests with:
+Run the test suite with:
 
-.\mvnw.cmd test
+```powershell
+./mvnw test
+```
 
-The project includes unit tests for ticket business logic such as:
-
-- Ticket creation
-- Customer validation
-- Category validation
-- Agent assignment
-- Status transitions
-- Closed ticket protection
-
-All 10 unit tests currently pass successfully.
+The project uses H2 in the test profile so tests do not require a running PostgreSQL instance.

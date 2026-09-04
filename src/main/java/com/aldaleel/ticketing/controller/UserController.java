@@ -1,6 +1,7 @@
 package com.aldaleel.ticketing.controller;
 
 import com.aldaleel.ticketing.dto.request.CreateUserRequest;
+import com.aldaleel.ticketing.dto.request.UpdateUserRequest;
 import com.aldaleel.ticketing.dto.response.UserResponse;
 import com.aldaleel.ticketing.entity.User;
 import com.aldaleel.ticketing.mapper.UserMapper;
@@ -27,10 +28,10 @@ public class UserController {
     public ResponseEntity<UserResponse> createUser(
             @Valid @RequestBody CreateUserRequest request
     ) {
-
         User user = User.builder()
                 .name(request.name())
                 .email(request.email())
+                .password(request.password())
                 .role(request.role())
                 .build();
 
@@ -43,7 +44,6 @@ public class UserController {
 
     @GetMapping
     public ResponseEntity<List<UserResponse>> getAllUsers() {
-
         List<UserResponse> response = userService
                 .getAllUsers()
                 .stream()
@@ -57,34 +57,32 @@ public class UserController {
     public ResponseEntity<UserResponse> getUserById(
             @PathVariable UUID id
     ) {
-
         User user = userService.getUserById(id);
 
-        return ResponseEntity.ok(
-                UserMapper.toResponse(user)
-        );
+        return ResponseEntity.ok(UserMapper.toResponse(user));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable UUID id,
-            @RequestBody User user
+            @Valid @RequestBody UpdateUserRequest request
     ) {
+        User user = User.builder()
+                .name(request.name())
+                .password(request.password())
+                .role(request.role())
+                .build();
 
         User updatedUser = userService.updateUser(id, user);
 
-        return ResponseEntity.ok(
-                UserMapper.toResponse(updatedUser)
-        );
+        return ResponseEntity.ok(UserMapper.toResponse(updatedUser));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(
             @PathVariable UUID id
     ) {
-
         userService.deleteUser(id);
-
         return ResponseEntity.noContent().build();
     }
 }

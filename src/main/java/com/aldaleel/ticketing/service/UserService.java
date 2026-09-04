@@ -1,7 +1,9 @@
 package com.aldaleel.ticketing.service;
 
 import com.aldaleel.ticketing.entity.User;
+import com.aldaleel.ticketing.exception.UserNotFoundException;
 import com.aldaleel.ticketing.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,9 +15,11 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public User createUser(User user) {
@@ -23,13 +27,24 @@ public class UserService {
             throw new IllegalArgumentException("Email already exists");
         }
 
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new IllegalArgumentException("Password is required");
+        }
+
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
     }
 
     @Transactional(readOnly = true)
     public User getUserById(UUID id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(id));
+    }
+
+    @Transactional(readOnly = true)
+    public User getUserByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + email));
     }
 
     @Transactional(readOnly = true)
@@ -40,8 +55,17 @@ public class UserService {
     public User updateUser(UUID id, User updatedUser) {
         User existingUser = getUserById(id);
 
-        existingUser.setName(updatedUser.getName());
-        existingUser.setRole(updatedUser.getRole());
+        if (updatedUser.getName() != null && !updatedUser.getName().isBlank()) {
+            existingUser.setName(updatedUser.getName());
+        }
+
+        if (updatedUser.getRole() != null) {
+            existingUser.setRole(updatedUser.getRole());
+        }
+
+        if (updatedUser.getPassword() != null && !updatedUser.getPassword().isBlank()) {
+            existingUser.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
+        }
 
         return userRepository.save(existingUser);
     }

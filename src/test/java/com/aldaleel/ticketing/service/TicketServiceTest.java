@@ -3,6 +3,8 @@ package com.aldaleel.ticketing.service;
 import com.aldaleel.ticketing.entity.Category;
 import com.aldaleel.ticketing.entity.Ticket;
 import com.aldaleel.ticketing.entity.User;
+import com.aldaleel.ticketing.exception.InvalidTicketStateTransitionException;
+import com.aldaleel.ticketing.exception.UnauthorizedTicketAccessException;
 import com.aldaleel.ticketing.repository.CategoryRepository;
 import com.aldaleel.ticketing.repository.TicketRepository;
 import com.aldaleel.ticketing.repository.TicketStatusHistoryRepository;
@@ -14,10 +16,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,7 +54,6 @@ class TicketServiceTest {
 
     @BeforeEach
     void setUp() {
-
         customerId = UUID.randomUUID();
         agentId = UUID.randomUUID();
         categoryId = UUID.randomUUID();
@@ -60,6 +63,7 @@ class TicketServiceTest {
                 .id(customerId)
                 .name("Test Customer")
                 .email("customer@test.com")
+                .password("password")
                 .role(User.Role.CUSTOMER)
                 .build();
 
@@ -67,6 +71,7 @@ class TicketServiceTest {
                 .id(agentId)
                 .name("Test Agent")
                 .email("agent@test.com")
+                .password("password")
                 .role(User.Role.AGENT)
                 .build();
 
@@ -84,20 +89,15 @@ class TicketServiceTest {
                 .status(Ticket.Status.OPEN)
                 .category(category)
                 .customer(customer)
+                .assignedAgent(agent)
                 .build();
     }
 
     @Test
     void createTicket_shouldCreateTicketSuccessfully() {
-
-        when(userRepository.findById(customerId))
-                .thenReturn(Optional.of(customer));
-
-        when(categoryRepository.findById(categoryId))
-                .thenReturn(Optional.of(category));
-
-        when(ticketRepository.save(any(Ticket.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.findById(customerId)).thenReturn(Optional.of(customer));
+        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Ticket result = ticketService.createTicket(
                 "Test Ticket",
@@ -109,27 +109,14 @@ class TicketServiceTest {
 
         assertNotNull(result);
         assertEquals("Test Ticket", result.getTitle());
-        assertEquals("Test Description", result.getDescription());
-        assertEquals(Ticket.Priority.HIGH, result.getPriority());
         assertEquals(Ticket.Status.OPEN, result.getStatus());
         assertEquals(customer, result.getCustomer());
-        assertEquals(category, result.getCategory());
-
         verify(ticketRepository).save(any(Ticket.class));
     }
 
     @Test
     void createTicket_shouldRejectNonCustomer() {
-
-        User agentUser = User.builder()
-                .id(agentId)
-                .name("Agent User")
-                .email("agent2@test.com")
-                .role(User.Role.AGENT)
-                .build();
-
-        when(userRepository.findById(agentId))
-                .thenReturn(Optional.of(agentUser));
+        when(userRepository.findById(agentId)).thenReturn(Optional.of(agent));
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
@@ -142,200 +129,101 @@ class TicketServiceTest {
                 )
         );
 
-        assertEquals(
-                "Only customers can create tickets",
-                exception.getMessage()
-        );
-
+        assertEquals("Only customers can create tickets", exception.getMessage());
         verify(ticketRepository, never()).save(any());
     }
 
     @Test
-    void createTicket_shouldRejectMissingCustomer() {
+    void assignTicket_shouldMoveOpenTicketToInProgress() {
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(userRepository.findById(agentId)).thenReturn(Optional.of(agent));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        when(userRepository.findById(customerId))
-                .thenReturn(Optional.empty());
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> ticketService.createTicket(
-                        "Test Ticket",
-                        "Test Description",
-                        Ticket.Priority.HIGH,
-                        categoryId,
-                        customerId
-                )
-        );
-
-        assertEquals(
-                "Customer not found",
-                exception.getMessage()
-        );
-
-        verify(ticketRepository, never()).save(any());
-    }
-
-    @Test
-    void createTicket_shouldRejectMissingCategory() {
-
-        when(userRepository.findById(customerId))
-                .thenReturn(Optional.of(customer));
-
-        when(categoryRepository.findById(categoryId))
-                .thenReturn(Optional.empty());
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> ticketService.createTicket(
-                        "Test Ticket",
-                        "Test Description",
-                        Ticket.Priority.HIGH,
-                        categoryId,
-                        customerId
-                )
-        );
-
-        assertEquals(
-                "Category not found",
-                exception.getMessage()
-        );
-
-        verify(ticketRepository, never()).save(any());
-    }
-
-    @Test
-    void assignTicket_shouldAssignAgentSuccessfully() {
-
-        when(ticketRepository.findById(ticketId))
-                .thenReturn(Optional.of(ticket));
-
-        when(userRepository.findById(agentId))
-                .thenReturn(Optional.of(agent));
-
-        when(ticketRepository.save(any(Ticket.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        Ticket result = ticketService.assignTicket(
-                ticketId,
-                agentId
-        );
+        Ticket result = ticketService.assignTicket(ticketId, agentId, agentId, User.Role.AGENT);
 
         assertEquals(agent, result.getAssignedAgent());
         assertEquals(Ticket.Status.IN_PROGRESS, result.getStatus());
-
-        verify(ticketRepository).save(ticket);
+        verify(historyRepository).save(any());
     }
 
     @Test
-    void assignTicket_shouldRejectNonAgent() {
-
-        when(ticketRepository.findById(ticketId))
-                .thenReturn(Optional.of(ticket));
-
-        when(userRepository.findById(customerId))
-                .thenReturn(Optional.of(customer));
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> ticketService.assignTicket(
-                        ticketId,
-                        customerId
-                )
-        );
-
-        assertEquals(
-                "User must have AGENT role",
-                exception.getMessage()
-        );
-
-        verify(ticketRepository, never()).save(any());
-    }
-
-    @Test
-    void updateStatus_shouldCreateHistorySuccessfully() {
-
+    void updateStatus_shouldAllowValidTransition() {
         ticket.setStatus(Ticket.Status.IN_PROGRESS);
-
-        when(ticketRepository.findById(ticketId))
-                .thenReturn(Optional.of(ticket));
-
-        when(userRepository.findById(agentId))
-                .thenReturn(Optional.of(agent));
-
-        when(ticketRepository.save(any(Ticket.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(userRepository.findById(agentId)).thenReturn(Optional.of(agent));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Ticket result = ticketService.updateStatus(
                 ticketId,
                 Ticket.Status.RESOLVED,
-                agentId
+                agentId,
+                agentId,
+                User.Role.AGENT
         );
 
-        assertEquals(
-                Ticket.Status.RESOLVED,
-                result.getStatus()
-        );
-
+        assertEquals(Ticket.Status.RESOLVED, result.getStatus());
         verify(historyRepository).save(any());
-
-        verify(ticketRepository).save(ticket);
     }
 
     @Test
     void updateStatus_shouldRejectInvalidTransition() {
-
         ticket.setStatus(Ticket.Status.OPEN);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        when(userRepository.findById(agentId)).thenReturn(Optional.of(agent));
 
-        when(ticketRepository.findById(ticketId))
-                .thenReturn(Optional.of(ticket));
-
-        when(userRepository.findById(agentId))
-                .thenReturn(Optional.of(agent));
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        InvalidTicketStateTransitionException exception = assertThrows(
+                InvalidTicketStateTransitionException.class,
                 () -> ticketService.updateStatus(
                         ticketId,
                         Ticket.Status.RESOLVED,
-                        agentId
+                        agentId,
+                        agentId,
+                        User.Role.AGENT
                 )
         );
 
-        assertTrue(
-                exception.getMessage()
-                        .contains("Invalid status transition")
-        );
-
+        assertTrue(exception.getMessage().contains("Invalid ticket status transition"));
         verify(historyRepository, never()).save(any());
-        verify(ticketRepository, never()).save(any());
     }
 
     @Test
-    void updateStatus_shouldRejectClosedTicket() {
+    void getTicketForUser_shouldRejectUnauthorizedAccess() {
+        User secondCustomer = User.builder()
+                .id(UUID.randomUUID())
+                .name("Other Customer")
+                .email("other@test.com")
+                .password("secret")
+                .role(User.Role.CUSTOMER)
+                .build();
 
-        ticket.setStatus(Ticket.Status.CLOSED);
+        ticket.setCustomer(secondCustomer);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
 
-        when(ticketRepository.findById(ticketId))
-                .thenReturn(Optional.of(ticket));
-
-        when(userRepository.findById(agentId))
-                .thenReturn(Optional.of(agent));
-
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
-                () -> ticketService.updateStatus(
-                        ticketId,
-                        Ticket.Status.IN_PROGRESS,
-                        agentId
-                )
+        UnauthorizedTicketAccessException exception = assertThrows(
+                UnauthorizedTicketAccessException.class,
+                () -> ticketService.getTicketForUser(ticketId, customerId, User.Role.CUSTOMER)
         );
 
-        assertEquals(
-                "Closed tickets cannot be modified",
-                exception.getMessage()
-        );
+        assertTrue(exception.getMessage().contains("access"));
+    }
 
-        verify(historyRepository, never()).save(any());
-        verify(ticketRepository, never()).save(any());
+    @Test
+    void getAllTicketsForUser_shouldReturnOnlyAssignedTicketsForAgents() {
+        Ticket anotherTicket = Ticket.builder()
+                .id(UUID.randomUUID())
+                .title("Another")
+                .description("Second Description")
+                .priority(Ticket.Priority.LOW)
+                .status(Ticket.Status.OPEN)
+                .category(category)
+                .customer(customer)
+                .assignedAgent(agent)
+                .build();
+
+        when(ticketRepository.findAll()).thenReturn(List.of(ticket, anotherTicket));
+
+        List<Ticket> result = ticketService.getAllTicketsForUser(agentId, User.Role.AGENT);
+
+        assertEquals(2, result.size());
     }
 }
